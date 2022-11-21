@@ -1,9 +1,12 @@
 package httpmocking
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -27,8 +30,9 @@ func TestFixedResponseRoundTripper(t *testing.T) {
 	}
 
 	const header = "Header"
+	const headerValue = "headerValue"
 
-	request.Header = map[string][]string{header: {"headervalue"}}
+	request.Header = map[string][]string{header: {headerValue}}
 	response, err := c.Do(request)
 
 	if err != nil {
@@ -57,7 +61,7 @@ func TestFixedResponseRoundTripper(t *testing.T) {
 		t.Fatal("Should correctly record request header")
 	}
 
-	if frt.Request.Header[header][0] != "headervalue" {
+	if frt.Request.Header[header][0] != headerValue {
 		t.Fatal("Should correctly record request header")
 	}
 }
@@ -150,11 +154,15 @@ func TestWaitGroupRoundTripper(t *testing.T) {
 
 	go func() {
 		response, err = c.Do(request)
-		defer response.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 	go func() {
 		response2, err2 = c.Do(request)
-		defer response2.Body.Close()
+		if err != nil {
+			t.Error(err)
+		}
 	}()
 
 	wrt.WG.Wait()
@@ -195,4 +203,34 @@ func TestWaitGroupRoundTripper(t *testing.T) {
 	if wrt.Request.Header[header][0] != headerValue {
 		t.Fatal("Should correctly record request header")
 	}
+}
+
+func TestInspectRoundTripper(t *testing.T) {
+
+	var b = &bytes.Buffer{}
+
+	irt := &InspectRoundTripper{
+		W: b,
+	}
+
+	c := &http.Client{
+		Transport: irt,
+	}
+
+	resp, err := c.Post("http://httpbin.org/anything", "application/json", strings.NewReader("hello, world"))
+	if err != nil {
+		t.Fatal("Should not err out", err)
+	}
+	defer resp.Body.Close()
+	type binResponse struct {
+		Data string `json:"data"`
+	}
+	bR := &binResponse{}
+	if err = json.Unmarshal(b.Bytes(), bR); err != nil {
+		t.Fatal(err)
+	}
+	if bR.Data != "hello, world" {
+		t.Fatal("Should be able to echo a response")
+	}
+
 }

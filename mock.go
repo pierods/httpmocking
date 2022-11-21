@@ -2,6 +2,7 @@ package httpmocking
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"sync"
@@ -55,4 +56,23 @@ func (w *WaitGroupRoundTripper) RoundTrip(r *http.Request) (*http.Response, erro
 	w.WG.Done()
 
 	return w.response, nil
+}
+
+type InspectRoundTripper struct {
+	rt http.Transport
+	W  io.Writer
+}
+
+func (i *InspectRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	trip, err := i.rt.RoundTrip(request)
+	if err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(trip.Body)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Fprint(i.W, string(body))
+	trip.Body = io.NopCloser(bytes.NewReader(body))
+	return trip, nil
 }
